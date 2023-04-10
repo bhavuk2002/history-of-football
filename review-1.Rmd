@@ -1,0 +1,580 @@
+---
+title: "Review 1 DV"
+author: "20BCE1954 Bhavuk Mittal"
+date: "2023-02-28"
+output: html_document
+---
+```{r}
+# How soccer became a global sport: where did it start and what changed as more teams were starting to compete.
+# Which countries have dominated the different eras of soccer since everything started.
+
+
+# Cleaning, processing and first exploration
+
+# As seen below, this data set consists of (supposedly) all games since the inaugural Scotland - England in 1872.
+# For each game, we have the score, the tournament, the host city and country.
+
+### Loading libraries
+library(ggplot2) # Data visualization
+library(readr) # CSV file I/O, e.g. the read_csv function
+library(dplyr)
+library(plotly)
+library(reshape2)
+
+
+
+# Reading input file.
+df <- read_csv("C://Users//Nishtha//Documents//bhavuk//Semester 6//DV//J Comp//results.csv")
+
+head(df)
+```
+
+
+```{r}
+# Let's check if we hace some NA or NULL values we should clean.
+# Apparently not. Good news, let's continue.
+```
+
+
+```{r}
+apply(df, 2, function(v) {length(which(is.na(v) | is.null(v)))})
+```
+
+
+```{r}
+# Let's process a bit the data so that we can have a quicker access to some important feature such as the result or the names of the winning or losing team. The outcome of a game will be encoded as D for draw, H for the home team winning and A for the away team winning. We will also extract some date-related features such as the day of week or month.
+```
+
+
+```{r}
+game_outcome <- function(home_score, away_score) {
+  outcome <- "D"
+  if (home_score > away_score) {outcome <- "H"}
+  if (home_score < away_score) {outcome <- "A"}
+  return(outcome)
+}
+
+winning_team <- function(home_score, away_score, home_team, away_team) {
+  winning_team <- NA
+  if (home_score > away_score) {winning_team <- home_team}
+  if (home_score < away_score) {winning_team <- away_team}
+  return(winning_team)
+}
+
+losing_team <- function(home_score, away_score, home_team, away_team) {
+  losing_team <- NA
+  if (home_score < away_score) {losing_team <- home_team}
+  if (home_score > away_score) {losing_team <- away_team}
+  return(losing_team)
+}
+
+df <- df %>%
+  mutate(year = format(date, "%Y"),
+         month = format(date, "%b"),
+         dayofweek = weekdays(date)) %>%
+  rowwise() %>%
+  mutate(outcome = game_outcome(home_score, away_score),
+         winning_team = winning_team(home_score, away_score, home_team, away_team),
+         losing_team = losing_team(home_score, away_score, home_team, away_team)) %>%
+  ungroup()
+
+
+head(df)
+```
+
+
+```{r}
+# Now, let's do some basic exploration. How many entries? Answer > 38k matches.
+```
+
+
+```{r}
+dim(df)
+```
+
+
+```{r}
+# A journey through the historical landscape of international soccer
+# Which teams play the most?
+# Let's start by checking which are the most represented teams? This will tell us which are the team with the richest history.
+# Surprisingly, Sweden is the team who has played the most games. Most top 10 countries are major soccer nation such as Brazil, Argentina, England, Germany or France. Countries such as Ururguay, Mexico and Hungary are also old teams as they participated to the first world cups (1930 and/or 1934).
+
+all_teams <- data.frame(teams = c(df$home_team, df$away_team), year=as.numeric(c(df$year, df$year)))
+
+all_teams_count <- all_teams %>%
+  group_by(teams) %>%
+  summarise(number_games = length(teams)) %>%
+  arrange(desc(number_games))
+
+head(all_teams_count, 10)
+```
+
+
+```{r}
+# It is likely all these teams have a different trajectory, some might have start playing earlier and some later. The plot below displays the cumulative sum of the number of matches for these top 10 teams. Hover the line to display the name of the team. You can also click on a team's name to hide/show it.
+
+top_teams_games_per_year <- all_teams %>%
+  filter(teams %in% head(all_teams_count, 10)$teams & year < 2018) %>%
+  group_by(teams, year) %>%
+  summarise(nb_games = length(year)) %>%
+  mutate(year_date=as.Date(paste(year,"-01-01",sep="")))
+```
+
+
+```{r}
+library(plotly)
+
+top_teams_games_per_year <- top_teams_games_per_year %>%
+  arrange(teams, year) %>%
+  group_by(teams) %>%
+  mutate(cumsum=cumsum(nb_games))
+
+p <- ggplot(top_teams_games_per_year, aes(x=year_date, y=cumsum, colour=teams, group=teams)) +
+  geom_line() +
+  labs(x="Year", y="Cumulated number of games", title="Top 10 teams in total number of games", colour="Click on a team \nto hide/show it")
+```
+
+
+```{r}
+ggplotly(p)
+```
+
+
+```{r}
+# The 10 most active teams indded have different trajectories. England gets its second positopm thanks to the many games they played in the 19th century. Some countries such as Sweden, France or Hungary have a more steady progression while teams like Korea or Mexico join the top 10 thanks to their recent hyper activity (Korea's first official games were just before 1950).
+```
+
+
+```{r}
+# How many games per year?
+# Let's now check how many games were played each year and how the total number of international games evolve with time.
+```
+
+
+```{r}
+tmp <- df %>%
+  filter(year < 2018) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarise(nb_games = length(date))  %>%
+  ungroup()
+
+ggplot(tmp, aes(x=year, y=nb_games, group=1)) +
+  geom_line() +
+  labs(x="Year", title="Number of international soccer games", y="") +
+  scale_x_continuous(breaks=seq(1870, 2020, 10))
+```
+
+
+```{r}
+# There are few interestings things going on here:
+# * Number of games is rising, with high growth in the 80s/90s.
+# * It seems there is a peak around 2010, with a slight decrease since.
+# * We see a drop during world wars.
+# * Since the 80s, data is very spiky, likely due to the absence/presence of world cups or other events.
+#
+```
+
+
+```{r}
+# Let's try to visualise this to add some understanding to our plot.
+
+wc_years <- c(1930, 1934, 1938, seq(1950, 2014, 4))
+
+tmp <- tmp %>%
+  mutate(is_wc = year %in% wc_years)
+
+ggplot(tmp, aes(x=year, y=nb_games, group=1)) +
+  geom_line() +
+  geom_point(data = tmp %>% filter(is_wc), aes(colour=is_wc)) +
+  labs(x="Year", title="Number of international soccer games", y="", colour="World cup year") +
+  geom_vline(xintercept=c(1914,1918,1939,1945), lwd=0.3, colour="gray80") +
+  scale_x_continuous(breaks=seq(1870, 2020, 10))
+```
+
+
+```{r}
+# The two main drops indeed correspond to the 2 world wars but, surprisingly, the world cup years are those counting less matches.
+```
+
+
+```{r}
+# Let's investigate which are the most common game types and competitions every year, since 2000.
+
+df_competitions <- df %>%
+  group_by(tournament, year) %>%
+  summarise(nb_games = length(date))
+
+ggplot(df_competitions %>% filter(year >= 2000 & year < 2018),
+       aes(x=year, y=nb_games, fill=tournament)) +
+  geom_bar(stat="identity") +
+  guides(fill=FALSE) +
+  labs(x="Year", y="Number of games")
+```
+
+
+```{r}
+# We can see that some events/tournaments are more frequent on non-world cup years such as 2007 or 2011. Let's check what they are.
+```
+
+
+```{r}
+df_competitions %>% filter(year == 2011) %>% arrange(desc(nb_games))
+
+df_competitions %>% filter(year == 2010) %>% arrange(desc(nb_games))
+```
+
+
+```{r}
+# World cup qualifications generates much more matches than the world cup itself, which makes sense as the World Cup only concerns 32 countries. This is well shown in the two plost below: there is no WC qualification matches during a World Cup year and the number of qualification matches is greater than then number of WC matches by a factor 3 to 7 in general.
+
+df_competition_filtered <- df_competitions %>% 
+  filter(year >= 2006 & year < 2018 & tournament %in% c("Friendly","UEFA Euro qualification","FIFA World Cup", "FIFA World Cup qualification", "African Cup of Nations qualification")) 
+
+ggplot(df_competition_filtered, aes(x=year, y=nb_games, group=tournament, colour=tournament)) +
+  geom_point() +
+  geom_line() +
+  labs(x="Year", y="Nb games", colour="Competition")
+
+# %% [code]
+ggplot(df_competition_filtered, aes(x=year, y=nb_games, group=tournament, fill=tournament)) +
+  geom_bar(stat="identity") +
+  labs(x="Year", y="Nb games", fill="Competition")
+```
+
+
+```{r}
+# Worldwide soccer adoption
+# When did soccer start to be widely played, i.e. when do most nations start playing international games? The plot below teaches us several things:
+# 
+# * The number of teams steadily increased 1902 and this increase accelerated up to 1920.
+# * From there, the pace of addition of new teams increase much faster and stalls abit around the late 40's
+# * Then we see a steady and rapid growth up to the mid 1990's.
+
+df_teams_start <- all_teams %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(teams) %>%
+  summarise(first_game = min(year))
+
+df_year_teams_start <- df_teams_start %>%
+  group_by(first_game) %>%
+  summarise(n = length(teams)) %>%
+  arrange(first_game) %>%
+  mutate(cumsum = cumsum(n))
+
+ggplot(df_year_teams_start, aes(x=first_game, y=cumsum)) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(1870,2020, 10)) +
+  labs(x="Year", title="Cumulative sum of number of international soccer teams", y="")
+```
+
+
+```{r}
+# Which were the first and last teams to join?
+
+# The four first teams to compete in international games were from what is now forming UK. Soccer then crossed the pond and teams such as Canada, USA, Argentina or Uruguay joined the party. In the same time, central European countries such as Austria and Hungary also join the internation arena.
+
+# Amongst the late joiners we mostly find tiny countries (Vatican or Comoros) and recent ones (Kosovo or South Sudan). We also find Caribean or northern american islands such as which aren;t countries but collectivies or municipalities of countries such as France or Netherlands. ALthough they are not nations, they competed against other countries either in friendly games or in local tournaments.
+```
+
+
+```{r}
+df_teams_start %>%
+  arrange(first_game) %>%
+  head(10)
+
+df_teams_start %>%
+  arrange(first_game) %>%
+  tail(10)
+```
+
+```{r}
+
+# We have seen how different teams and continent started to compete one after the others. Let's now see what did this imply for the game itself and its organisation.
+# When do games occur?
+# Interstingly, the very first games mostly occur on Saturdays but a decent number also took place on Mondays! No game occurred on a Sunday until 1900, potentially for religious purposes but, around the 1910's Sunday was the most common day of the week to see an international game. Other week days, from Tuesday to Friday, weren't an option until later (as late as 1910 for Fridays).
+# 
+# The proportion of games happenning on a given day then changed quite a lot. Wednesdays games became very common and around 30% of the games happened on this day around the year 2000. More recently days such as Tuesday, Thursday or Friday also became more popular.
+```
+
+
+```{r}
+df_games_per_dayofweek <- df %>%
+  mutate(year = as.numeric(year)) %>%
+  filter(year < 2018) %>%
+  group_by(year, dayofweek) %>%
+  summarise(n = length(date)) %>%
+  group_by(year) %>%
+  mutate(perc = n / sum(n) * 100) %>%
+  mutate(dayofweek = factor(dayofweek, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")))
+
+ggplot(df_games_per_dayofweek, aes(x=year, y=perc, colour=dayofweek, group=dayofweek)) +
+  geom_line() +
+  facet_wrap(~dayofweek) +
+  labs(x="Year", y="Percentage of games played") +
+  guides(colour=FALSE) +
+  scale_x_continuous(breaks = seq(1870, 2020, 20)) +
+  scale_y_continuous(breaks = seq(0,100, 10)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+# Now that we have looked at days, let's check whether some months are more popular for soccer games. The first games mostly occur during Spring months and since then, some month have known some peaks of popularity for intenational games at different period (e.g. many games happened in December in the 1940s).
+# In a more recent history, international games became less common in May but more in June.
+```
+
+
+```{r}
+df_games_per_month <- df %>%
+  mutate(year = as.numeric(year)) %>%
+  filter(year < 2018) %>%
+  group_by(year, month) %>%
+  summarise(n = length(date)) %>%
+  group_by(year) %>%
+  mutate(perc = n / sum(n) * 100) %>%
+  mutate(month = factor(month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")))
+
+ggplot(df_games_per_month, aes(x=year, y=perc, colour=month, group=month)) +
+  geom_line() +
+  facet_wrap(~month) +
+  labs(x="Year", y="Percentage of games played") +
+  guides(colour=FALSE) +
+  scale_x_continuous(breaks = seq(1870, 2020, 20)) +
+  scale_y_continuous(breaks = seq(0,100, 10)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+# Evolution of results
+ 
+# Let' know talk about sport and  actual results! First let's check how the proportion of draws and home/away victories evolve through time. Main learnings are:
+# * A victory of the home-based team has always been the most likely event.
+# * A victory of the visitors is the second most likely outcome, although it tends to decrease in the second half of the 20th century.
+# * A draw has always been the least likely outcome, altough it has increased in share since the 1940's.
+ 
+# It is to be noted that the "home" team isn't always playing on his own country, as for example during world or continental cups.
+
+df_outcome_per_year <- df %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year, outcome) %>%
+  summarise(n = length(year)) %>%
+  group_by(year) %>%
+  mutate(total_year = sum(n),
+         perc = n / total_year * 100)
+
+ggplot(df_outcome_per_year %>% filter(year > 1900 & year < 2018), aes(x=year, y=perc, group=outcome, colour=outcome)) +
+  geom_line() +
+  labs(x="Year", y="Percentage of games", colour="Outcome") +
+  geom_smooth(se=FALSE, method="loess") +
+  scale_x_continuous(breaks = seq(1870, 2020, 20))
+```
+
+
+```{r}
+# Let's now get to what is at the heart of soccer: goals! How did this evolve with time?
+
+# Although it started low (the first game resulted in a 0-0 between Scotland and England), then number of goals per games quickly skyrocketed and, before 1900, the average number of goals per game per year could be as high as 8!
+# This average then stabilized around 4 until 1950 and then decreased down to 2.5 in a more modern era. The 80's has been the period were games delivered the lowest number of goals.
+```
+
+
+```{r}
+df_goals_per_game <- df %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarise(nb_games = length(year),
+            nb_goals = sum(home_score + away_score),
+            goals_per_game = nb_goals / nb_games)
+
+ggplot(df_goals_per_game, aes(x=year, y = goals_per_game)) +
+  geom_line() +
+  labs(x="Year", y="", title="Average number of goals per game") +
+  scale_x_continuous(breaks = seq(1870, 2020, 10)) 
+```
+
+```{r}
+# # Best performing teams during soccer history
+# 
+# ## Which teams were consistent high scorer and good defender across time?
+# 
+# We have seen how games became globally less prolific in goals, but what about teams? Did some teams always scored a lot or, at contrary, were some always great defenders? 
+# First, let's transform a bit the data for this purpose. We will now have two entries per game, one from the perspective of each team.
+```
+
+
+```{r}
+games_info_home <- function(v) {
+  team1 = v["home_team"]
+  team1_gf <- v["home_score"]
+  team1_ga <- v["away_score"]
+  team1_outcome <-  "D"
+  if (team1_gf > team1_ga) {team1_outcome <- "W"}
+  if (team1_gf < team1_ga) {team1_outcome <- "L"}
+  
+  res1 <- c(v["date"], v["year"], v["tournament"], team1, v["away_team"],team1_gf, team1_ga, team1_outcome, "H")
+  return(res1)
+}
+
+```
+
+
+```{r}
+games_info_away <- function(v) {
+  team2 = v["away_team"]
+  team2_gf <- v["away_score"]
+  team2_ga <- v["home_score"]
+  team2_outcome <-  "D"
+  if (team2_gf > team2_ga) {team2_outcome <- "W"}
+  if (team2_gf < team2_ga) {team2_outcome <- "L"}
+  
+  res2 <- c(v["date"], v["year"], v["tournament"], team2, v["home_team"],team2_gf, team2_ga, team2_outcome, "A")
+  
+  return(res2)
+  
+}
+```
+
+
+```{r}
+
+df_teams_games_home <- t(apply(df, 1, games_info_home))
+df_teams_games_away <- t(apply(df, 1, games_info_away))
+df_teams_games <- rbind(df_teams_games_home, df_teams_games_away)
+
+colnames(df_teams_games) <- c("date", "year", "tournament", "team", "opponent", "team_score", "opponent_score", "team_outcome", "where")
+
+df_teams_games <- as.data.frame(df_teams_games) %>%
+  mutate(date=as.Date(date),
+         year = as.numeric(as.character(year))) %>%
+  mutate(team_score = as.numeric(as.character(team_score)),
+         opponent_score = as.numeric(as.character(opponent_score))) %>%
+  arrange(date)
+
+head(df_teams_games, 10)
+```
+
+
+```{r}
+df_teams_goals_per_year <- df_teams_games %>%
+  
+  group_by(team, year) %>%
+  summarise(gf_per_game = sum(team_score) / length(date),
+            ga_per_game = sum(opponent_score) / length(date),
+            total_games = length(date))
+
+head(df_teams_goals_per_year, 10)
+```
+
+
+```{r}
+# When filtering out teams with less tahn 25 games, the name of the most prolific teams overall might surprise you. The top 4 greatest scorer are small oceanian teams such as New Caledonia, Tahiti, Papua New Guinea or Fiji. This is likely explained by these teams mostly competing against other "local" teams in more open games. Amongst the most "conventional" soccer nations, Germany, England and Brazil make it to the podim with, respectively, 2.25, 2.19 and 2.19 goals per game in average during their history.
+```
+
+
+```{r}
+df_teams_goals_overall <- df_teams_games %>%
+  
+  group_by(team) %>%
+  summarise(gf_per_game = sum(team_score) / length(date),
+            ga_per_game = sum(opponent_score) / length(date),
+            total_games = length(date))
+
+top10_attack <- head(df_teams_goals_overall %>% filter(total_games > 25) %>% arrange(desc(gf_per_game)), 10) %>% select(team, gf_per_game, total_games)
+top10_attack
+```
+
+
+```{r}
+# The top defenses also offer some surprises. Iran and Morocco have the best defenses with 0.82 and 0.85 goals in average during around 500 games! Spain and Brazil make it to the top 5. Italy, the mother nation of [the Catenaccio](https://en.wikipedia.org/wiki/Catenaccio) closes the top 10.
+```
+
+
+```{r}
+top10_defense <- head(df_teams_goals_overall %>% filter(total_games > 25) %>% arrange(ga_per_game), 10) %>% select(team, ga_per_game, total_games)
+top10_defense
+```
+
+
+```{r}
+# If we look at what happened since 1980 only, the picture only changes slightly.
+# Top scorer teams are still from Oceania. 
+# Amongst the best defenses, 6 of the top 10 teams are now from Europe (including all teams from the top 3) and the number of goal against per game has dropped bewteen 0.73 and 0.88. brazil, considered as a very offensive team, still makes it to the top 10.
+```
+
+
+```{r}
+df_teams_games %>%
+  filter(year > 1980) %>%
+  group_by(team) %>%
+  summarise(gf_per_game = sum(team_score) / length(date),
+            ga_per_game = sum(opponent_score) / length(date),
+            total_games = length(date)) %>%
+  filter(total_games > 25) %>%
+  arrange(desc(gf_per_game)) %>%
+  head(10) %>% 
+  select(team, gf_per_game, total_games)
+```
+
+
+```{r}
+df_teams_games %>%
+  filter(year > 1980) %>%
+  group_by(team) %>%
+  summarise(gf_per_game = sum(team_score) / length(date),
+            ga_per_game = sum(opponent_score) / length(date),
+            total_games = length(date)) %>%
+  filter(total_games > 25) %>%
+  arrange(ga_per_game) %>%
+  head(10) %>% select(team, ga_per_game, total_games)
+```
+
+
+```{r}
+# %% [markdown]
+# Let's look at how the defense and offense skills of these teams have evolved through time.
+# 
+# Some of the best socring teams are on a declining trend, such as Hungary, Tahiti or Papua New Guinea. However, other teams such as Germany, Brazil or Fiji are very stable, which is remakable as, as seen before, the overall number of goals per game is decreasing.
+# 
+# The best defending teams are following the global trend of games delivering less goals and are generallty taking less goals too.
+
+# %% [code]
+ggplot(top10_attack %>% select(team) %>% left_join(df_teams_goals_per_year, by="team"),
+       aes(x=year, y=gf_per_game, colour=team)) +
+  geom_line() +
+  facet_wrap(~team) +
+  labs(x="Year", y="Goal scored per game") +
+  guides(colour=FALSE) +
+  geom_smooth(method="lm")
+
+# %% [code]
+ggplot(top10_defense %>% select(team) %>% left_join(df_teams_goals_per_year, by="team"),
+       aes(x=year, y=ga_per_game, colour=team)) +
+  geom_line() +
+  facet_wrap(~team) +
+  labs(x="Year", y="Goal against per game") +
+  guides(colour=FALSE) +
+  geom_smooth(method="lm")
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
